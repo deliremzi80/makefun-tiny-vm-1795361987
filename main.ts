@@ -69,36 +69,44 @@ function run(p: Uint8Array, inp: Uint8Array): { out: Uint8Array; code: number } 
     if (opcode === 0x07) { const a = D[sp - 3]; D[sp - 3] = D[sp - 2]; D[sp - 2] = D[sp - 1]; D[sp - 1] = a; continue; }
     if (opcode === 0x17) { D[sp - 1] = -D[sp - 1] | 0; continue; }
     if (opcode === 0x1b) { D[sp - 1] = ~D[sp - 1]; continue; }
+    // Arithmetic, logic, and comparison operations
     if (opcode >= 0x10 && opcode <= 0x22) {
       const b = D[sp - 1];
       const a = D[sp - 2];
-      let r = 0;
-      if (opcode === 0x10) r = (a + b) | 0;
-      else if (opcode === 0x11) r = (a - b) | 0;
-      else if (opcode === 0x12) r = Math.imul(a, b);
-      else if (opcode === 0x13) {
-        if (b === 0) return trap(4);
-        r = a === -2147483648 && b === -1 ? a : (a / b) | 0;
-      } else if (opcode === 0x14) {
-        if (b === 0) return trap(4);
-        r = b === -1 ? 0 : (a % b) | 0;
-      } else if (opcode === 0x15) {
-        if (b === 0) return trap(4);
-        r = Math.floor((a >>> 0) / (b >>> 0)) | 0;
-      } else if (opcode === 0x16) {
-        if (b === 0) return trap(4);
-        r = ((a >>> 0) % (b >>> 0)) | 0;
-      } else if (opcode === 0x18) r = a & b;
-      else if (opcode === 0x19) r = a | b;
-      else if (opcode === 0x1a) r = a ^ b;
-      else if (opcode === 0x1c) r = a << (b & 31);
-      else if (opcode === 0x1d) r = a >> (b & 31);
-      else if (opcode === 0x1e) r = (a >>> (b & 31)) | 0;
-      else if (opcode === 0x20) r = a === b ? 1 : 0;
-      else if (opcode === 0x21) r = a < b ? 1 : 0;
-      else if (opcode === 0x22) r = (a >>> 0) < (b >>> 0) ? 1 : 0;
+      let res = 0;
+      switch (opcode) {
+        case 0x10: res = (a + b) | 0; break;
+        case 0x11: res = (a - b) | 0; break;
+        case 0x12: res = Math.imul(a, b); break;
+        case 0x13:
+          if (b === 0) return trap(4);
+          res = a === -2147483648 && b === -1 ? a : (a / b) | 0;
+          break;
+        case 0x14:
+          if (b === 0) return trap(4);
+          res = b === -1 ? 0 : (a % b) | 0;
+          break;
+        case 0x15:
+          if (b === 0) return trap(4);
+          res = Math.floor((a >>> 0) / (b >>> 0)) | 0;
+          break;
+        case 0x16:
+          if (b === 0) return trap(4);
+          res = ((a >>> 0) % (b >>> 0)) | 0;
+          break;
+        case 0x18: res = a & b; break;
+        case 0x19: res = a | b; break;
+        case 0x1a: res = a ^ b; break;
+        case 0x1c: res = a << (b & 31); break;
+        case 0x1d: res = a >> (b & 31); break;
+        case 0x1e: res = (a >>> (b & 31)) | 0; break;
+        case 0x20: res = a === b ? 1 : 0; break;
+        case 0x21: res = a < b ? 1 : 0; break;
+        case 0x22: res = (a >>> 0) < (b >>> 0) ? 1 : 0; break;
+        default: return trap(5);
+      }
       sp -= 2;
-      D[sp++] = r;
+      D[sp++] = res;
       continue;
     }
     if (opcode >= 0x30 && opcode <= 0x32) {
@@ -122,39 +130,48 @@ function run(p: Uint8Array, inp: Uint8Array): { out: Uint8Array; code: number } 
       pc = C[--csp];
       continue;
     }
+    // Memory load (LOAD)
     if (opcode === 0x40) {
       const addr = D[sp - 1];
       if (addr < 0 || addr >= MEMORY_WORDS) return trap(6);
       D[sp - 1] = M[addr];
       continue;
     }
+    // Memory store (STORE)
     if (opcode === 0x41) {
       const addr = D[sp - 1];
-      const v = D[sp - 2];
+      const val = D[sp - 2];
       if (addr < 0 || addr >= MEMORY_WORDS) return trap(6);
       sp -= 2;
-      M[addr] = v;
+      M[addr] = val;
       continue;
     }
+    // Print integer string representation (PRINT_INT)
     if (opcode === 0x50) {
-      const bytes = enc.encode(String(D[sp - 1]));
-      if (olen + bytes.length > OUTPUT_MAX) return trap(11);
+      const intVal = D[sp - 1];
+      const encoded = enc.encode(String(intVal));
+      if (olen + encoded.length > OUTPUT_MAX) return trap(11);
       sp--;
-      out.set(bytes, olen);
-      olen += bytes.length;
+      out.set(encoded, olen);
+      olen += encoded.length;
       continue;
     }
+    // Print byte (PRINT_BYTE)
     if (opcode === 0x51) {
       if (olen + 1 > OUTPUT_MAX) return trap(11);
-      out[olen++] = D[--sp] & 255;
+      out[olen++] = D[--sp] & 0xff;
       continue;
     }
+    // Read byte (READ_BYTE)
     if (opcode === 0x52) {
-      D[sp++] = inPos < inp.length ? inp[inPos++] : -1;
+      const byte = inPos < inp.length ? inp[inPos++] : -1;
+      D[sp++] = byte;
       continue;
     }
+    // Exit with code (EXIT)
     if (opcode === 0x53) {
-      return done(D[--sp] & 255);
+      const exitCode = D[--sp] & 0xff;
+      return done(exitCode);
     }
   }
 }
